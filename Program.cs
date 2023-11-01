@@ -1,15 +1,17 @@
 ﻿using CliFx;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
+using Serilog.Events;
 
-namespace AutoFocus
+namespace AutoFocus;
+
+internal class Program
 {
-    internal class Program
+    private static void SetupLogger()
     {
-        private static void SetupLogger()
-        {
 #if DEBUG
-            string logFilePath = "log.txt";
+        // ReSharper disable once ConvertToConstant.Local
+        var logFilePath = "log.txt";
 #else
     string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     string appFolder = Path.Combine(appDataPath, "AutoFocus");
@@ -21,58 +23,53 @@ namespace AutoFocus
     string logFilePath = Path.Combine(logFolder, "log.txt");
 #endif
 
-            // Configure Serilog
-            Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Information()
-                .Enrich.FromLogContext()
-                .WriteTo.Async(sink => sink.File(logFilePath, rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true))
-                .WriteTo.Console()
-                .CreateLogger();
-        }
+        // Configure Serilog
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .Enrich.FromLogContext()
+            .WriteTo.Async(sink => sink.File(logFilePath, rollingInterval: RollingInterval.Day, rollOnFileSizeLimit: true))
+            .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
+            .CreateLogger();
+    }
 
-        public static async Task<int> Main()
+    public static async Task<int> Main()
+    {
+        int returnCode;
+
+        SetupLogger();
+
+        try
         {
-            int returnCode = 0;
+            returnCode = await new CliApplicationBuilder()
+                .SetTitle("AutoFocus")
+                .SetDescription("Automate changing Sample Rate and Buffer Size in Focusrite Notifier device settings.")
+                .SetExecutableName("autofocus.exe")
+                .AddCommandsFromThisAssembly()
+                .UseTypeActivator(commandTypes =>
+                {
+                    var services = new ServiceCollection();
+                    services.AddLogging(builder => builder.AddSerilog(dispose: true));
 
-            SetupLogger();
+                    // Register all commands as transient services
+                    foreach (var commandType in commandTypes)
+                        services.AddTransient(commandType);
 
-            try
-            {
-                Log.Information(new string('-', 50));
-                Log.Information("Application is starting up");
-
-                returnCode = await new CliApplicationBuilder()
-                    .SetTitle("AutoFocus")
-                    .SetDescription("Automate changing Sample Rate and Buffer Size in Focusrite Notifier device settings.")
-                    .SetExecutableName("autofocus.exe")
-                    .AddCommandsFromThisAssembly()
-                    .UseTypeActivator(commandTypes =>
-                    {
-                        var services = new ServiceCollection();
-                        services.AddLogging(builder => builder.AddSerilog(dispose: true));
-
-                        // Register all commands as transient services
-                        foreach (var commandType in commandTypes)
-                            services.AddTransient(commandType);
-
-                        return services.BuildServiceProvider();
-                    })
-                    .AllowDebugMode()
-                    .Build()
-                    .RunAsync();
-            }
-            catch (Exception ex)
-            {
-                returnCode = 1;
-                Log.Error(ex, "Something went wrong");
-            }
-            finally
-            {
-                Log.Information("Application is stopping, goodbye.");
-                await Log.CloseAndFlushAsync();
-            }
-
-            return returnCode;
+                    return services.BuildServiceProvider();
+                })
+                .AllowDebugMode()
+                .Build()
+                .RunAsync();
         }
+        catch (Exception ex)
+        {
+            returnCode = 1;
+            Log.Error(ex, "Something went wrong");
+        }
+        finally
+        {
+            await Log.CloseAndFlushAsync();
+        }
+
+        return returnCode;
     }
 }
