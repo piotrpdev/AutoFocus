@@ -1,6 +1,6 @@
 ﻿# AutoFocus
 
-![example](.github/video/example.mp4)
+https://github.com/piotrpdev/AutoFocus/assets/99439005/2fa79a56-4231-46ca-ba44-acaa1aa62f4e
 
 ## Overview
 AutoFocus is a tool designed to automate the process of changing Sample Rate and Buffer Size in the Focusrite Notifier device settings. I made it because a lot of different programs change those settings when launched and then you have to manually change them back to prevent crackling in VoIP software (e.g. Discord).
